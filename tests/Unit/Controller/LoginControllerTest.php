@@ -7,6 +7,9 @@ namespace Marko\AdminPanel\Tests\Unit\Controller\Login;
 use Marko\Admin\Config\AdminConfigInterface;
 use Marko\AdminPanel\Controller\LoginController;
 use Marko\AdminPanel\Tests\Fixtures\FixedAdminGuardResolver;
+use Marko\Authentication\Exceptions\TooManyLoginAttemptsException;
+use Marko\RateLimiter\Attributes\RateLimit;
+use Marko\RateLimiter\Middleware\RateLimitMiddleware;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Attributes\WithoutMiddleware;
 use Marko\Routing\Http\Request;
@@ -20,6 +23,7 @@ use Marko\Testing\Fake\FakeConfigRepository;
 use Marko\Testing\Fake\FakeGuard;
 use Marko\Testing\Fake\FakeSession;
 use Marko\View\ViewInterface;
+use ReflectionAttribute;
 use ReflectionClass;
 use ReflectionMethod;
 
@@ -119,8 +123,12 @@ it('relies on the global CsrfMiddleware from marko/security for the login and lo
 
     foreach (['authenticate', 'logout'] as $action) {
         $method = new ReflectionMethod(LoginController::class, $action);
+        $routeMiddleware = array_merge(...array_map(
+            fn (ReflectionAttribute $attribute): array => $attribute->newInstance()->middleware,
+            $method->getAttributes(Middleware::class),
+        ));
 
-        expect($method->getAttributes(Middleware::class))->toBeEmpty()
+        expect($routeMiddleware)->not->toContain(CsrfMiddleware::class)
             ->and($method->getAttributes(WithoutMiddleware::class))->toBeEmpty();
     }
 
@@ -279,6 +287,48 @@ it('returns to login with error on invalid credentials', function (): void {
         ->and($view->lastData)->toHaveKey('error')
         ->and($view->lastData['error'])->toBe('Invalid email or password.')
         ->and($view->lastData)->toHaveKey('loginUrl')
+        ->and($view->lastData['loginUrl'])->toBe('/admin/login');
+});
+
+it('rate limits the admin login POST per client IP with RateLimitMiddleware', function (): void {
+    $method = new ReflectionMethod(LoginController::class, 'authenticate');
+    $middleware = $method->getAttributes(Middleware::class)[0]->newInstance();
+    $rateLimit = $method->getAttributes(RateLimit::class)[0]->newInstance();
+
+    expect($middleware->middleware)->toBe([RateLimitMiddleware::class])
+        ->and($rateLimit->maxAttempts)->toBe(10)
+        ->and($rateLimit->decaySeconds)->toBe(60)
+        ->and($rateLimit->name)->toBe('admin-login');
+});
+
+it('re-renders the login form as 429 with Retry-After when the login is locked out', function (): void {
+    $view = new LoginStubView();
+    $guard = new class (name: 'admin') extends FakeGuard
+    {
+        public function attempt(
+            array $credentials,
+        ): bool {
+            throw TooManyLoginAttemptsException::lockedOut('admin', 45);
+        }
+    };
+
+    $controller = new LoginController(
+        view: $view,
+        adminGuard: new FixedAdminGuardResolver($guard),
+        adminConfig: new LoginStubAdminConfig(),
+        csrfTokenManager: new LoginStubCsrfTokenManager(),
+    );
+
+    $response = $controller->authenticate(new Request(post: [
+        'email' => 'admin@example.com',
+        'password' => 'guess',
+    ]));
+
+    expect($response->statusCode())->toBe(429)
+        ->and($response->headers()['Retry-After'])->toBe('45')
+        ->and($view->lastTemplate)->toBe('admin-panel::auth/login')
+        ->and($view->lastData['error'])->toBe('Too many login attempts. Please try again in 45 seconds.')
+        ->and($view->lastData['csrfToken'])->toBe('test-csrf-token')
         ->and($view->lastData['loginUrl'])->toBe('/admin/login');
 });
 
