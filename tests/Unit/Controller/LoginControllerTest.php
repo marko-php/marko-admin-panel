@@ -7,14 +7,19 @@ namespace Marko\AdminPanel\Tests\Unit\Controller\Login;
 use Marko\Admin\Config\AdminConfigInterface;
 use Marko\AdminPanel\Controller\LoginController;
 use Marko\Routing\Attributes\Middleware;
+use Marko\Routing\Attributes\WithoutMiddleware;
 use Marko\Routing\Http\Request;
 use Marko\Routing\Http\Response;
 use Marko\Security\Contracts\CsrfTokenManagerInterface;
 use Marko\Security\Exceptions\CsrfTokenMismatchException;
 use Marko\Security\Middleware\CsrfMiddleware;
+use Marko\Session\Config\SessionConfig;
 use Marko\Testing\Fake\FakeAuthenticatable;
+use Marko\Testing\Fake\FakeConfigRepository;
 use Marko\Testing\Fake\FakeGuard;
+use Marko\Testing\Fake\FakeSession;
 use Marko\View\ViewInterface;
+use ReflectionClass;
 use ReflectionMethod;
 
 // Stub for ViewInterface
@@ -88,77 +93,64 @@ readonly class LoginStubCsrfTokenManager implements CsrfTokenManagerInterface
     }
 }
 
-it('rejects a POST to the admin login route when no CSRF token is supplied', function (): void {
-    $csrfTokenManager = new LoginStubCsrfTokenManager('test-csrf-token');
-    $middleware = new CsrfMiddleware(tokenManager: $csrfTokenManager);
+function loginCsrfMiddleware(): CsrfMiddleware
+{
+    $session = new FakeSession();
+    $session->start();
 
-    $middlewareAttributes = (new ReflectionMethod(LoginController::class, 'authenticate'))->getAttributes(
-        Middleware::class,
+    return new CsrfMiddleware(
+        tokenManager: new LoginStubCsrfTokenManager('test-csrf-token'),
+        session: $session,
+        sessionConfig: new SessionConfig(new FakeConfigRepository([
+            'session.cookie.name' => 'marko_session',
+            'session.cookie.path' => '/',
+            'session.cookie.domain' => '',
+            'session.cookie.secure' => true,
+        ])),
     );
+}
 
-    expect($middlewareAttributes)->toHaveCount(1)
-        ->and($middlewareAttributes[0]->newInstance()->middleware)->toContain(CsrfMiddleware::class);
+it('relies on the global CsrfMiddleware from marko/security for the login and logout routes', function (): void {
+    $securityRoot = dirname((string) new ReflectionClass(CsrfMiddleware::class)->getFileName(), 3);
+    $securityModule = require $securityRoot . '/module.php';
 
+    expect($securityModule['globalMiddleware'])->toContain(CsrfMiddleware::class);
+
+    foreach (['authenticate', 'logout'] as $action) {
+        $method = new ReflectionMethod(LoginController::class, $action);
+
+        expect($method->getAttributes(Middleware::class))->toBeEmpty()
+            ->and($method->getAttributes(WithoutMiddleware::class))->toBeEmpty();
+    }
+
+    expect(new ReflectionClass(LoginController::class)->getAttributes(WithoutMiddleware::class))->toBeEmpty();
+});
+
+it('rejects a POST to the admin login route when no CSRF token is supplied', function (): void {
     $request = new Request(server: ['REQUEST_METHOD' => 'POST']);
 
-    $middleware->handle($request, fn (Request $r) => new Response('OK', 200));
+    loginCsrfMiddleware()->handle($request, fn (Request $r) => new Response('OK', 200));
 })->throws(CsrfTokenMismatchException::class);
 
 it('rejects a POST to the admin login route when the CSRF token is invalid', function (): void {
-    $csrfTokenManager = new LoginStubCsrfTokenManager('test-csrf-token');
-    $middleware = new CsrfMiddleware(tokenManager: $csrfTokenManager);
-
-    $middlewareAttributes = (new ReflectionMethod(LoginController::class, 'authenticate'))->getAttributes(
-        Middleware::class,
-    );
-
-    expect($middlewareAttributes)->toHaveCount(1)
-        ->and($middlewareAttributes[0]->newInstance()->middleware)->toContain(CsrfMiddleware::class);
-
     $request = new Request(
         server: ['REQUEST_METHOD' => 'POST'],
         post: ['_token' => 'wrong-token'],
     );
 
-    $middleware->handle($request, fn (Request $r) => new Response('OK', 200));
+    loginCsrfMiddleware()->handle($request, fn (Request $r) => new Response('OK', 200));
 })->throws(CsrfTokenMismatchException::class);
 
 it('allows a POST to the admin login route when a valid CSRF token is supplied', function (): void {
-    $csrfTokenManager = new LoginStubCsrfTokenManager('test-csrf-token');
-    $middleware = new CsrfMiddleware(tokenManager: $csrfTokenManager);
-
-    $middlewareAttributes = (new ReflectionMethod(LoginController::class, 'authenticate'))->getAttributes(
-        Middleware::class,
-    );
-
-    expect($middlewareAttributes)->toHaveCount(1)
-        ->and($middlewareAttributes[0]->newInstance()->middleware)->toContain(CsrfMiddleware::class);
-
     $request = new Request(
         server: ['REQUEST_METHOD' => 'POST'],
         post: ['_token' => 'test-csrf-token'],
     );
 
-    $response = $middleware->handle($request, fn (Request $r) => new Response('OK', 200));
+    $response = loginCsrfMiddleware()->handle($request, fn (Request $r) => new Response('OK', 200));
 
     expect($response->statusCode())->toBe(200);
 });
-
-it('rejects a POST to the admin logout route when no valid CSRF token is supplied', function (): void {
-    $csrfTokenManager = new LoginStubCsrfTokenManager('test-csrf-token');
-    $middleware = new CsrfMiddleware(tokenManager: $csrfTokenManager);
-
-    $middlewareAttributes = (new ReflectionMethod(LoginController::class, 'logout'))->getAttributes(
-        Middleware::class,
-    );
-
-    expect($middlewareAttributes)->toHaveCount(1)
-        ->and($middlewareAttributes[0]->newInstance()->middleware)->toContain(CsrfMiddleware::class);
-
-    $request = new Request(server: ['REQUEST_METHOD' => 'POST']);
-
-    $middleware->handle($request, fn (Request $r) => new Response('OK', 200));
-})->throws(CsrfTokenMismatchException::class);
 
 it('exposes a CSRF token value to the login view so the form can submit it', function (): void {
     $view = new LoginStubView();
