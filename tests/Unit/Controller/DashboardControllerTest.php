@@ -13,6 +13,7 @@ use Marko\Admin\MenuItem;
 use Marko\AdminAuth\Entity\AdminUser;
 use Marko\AdminAuth\Entity\Role;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
+use Marko\AdminPanel\Config\AdminPanelConfig;
 use Marko\AdminPanel\Controller\DashboardController;
 use Marko\AdminPanel\Menu\AdminMenuBuilder;
 use Marko\AdminPanel\Tests\Fixtures\FixedAdminGuardResolver;
@@ -20,6 +21,7 @@ use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Http\Request;
 use Marko\Routing\Http\Response;
 use Marko\Testing\Fake\FakeAuthenticatable;
+use Marko\Testing\Fake\FakeConfigRepository;
 use Marko\Testing\Fake\FakeGuard;
 use Marko\View\ViewInterface;
 use ReflectionMethod;
@@ -167,11 +169,15 @@ function createDashboardController(
     StubView $view,
     StubSectionRegistry $registry,
     FakeGuard $guard,
+    string $pageTitle = 'Marko Admin',
 ): DashboardController {
     return new DashboardController(
         view: $view,
         menuBuilder: new AdminMenuBuilder($registry),
         adminGuard: new FixedAdminGuardResolver($guard),
+        config: new AdminPanelConfig(new FakeConfigRepository([
+            'admin-panel.page_title' => $pageTitle,
+        ])),
     );
 }
 
@@ -268,4 +274,17 @@ it('passes current user to base layout template', function (): void {
     expect($view->lastData)->toHaveKey('currentUser')
         ->and($view->lastData['currentUser'])->toBe($user)
         ->and($view->lastData['currentUser']->getAuthIdentifier())->toBe(5);
+});
+
+it('passes the configured admin-panel.page_title to the template as pageTitle', function (): void {
+    $view = new StubView();
+    $registry = new StubSectionRegistry();
+    $guard = new FakeGuard(name: 'admin', attemptResult: false);
+
+    $guard->setUser(createDashboardAdminUser(superAdmin: true));
+
+    createDashboardController($view, $registry, $guard, pageTitle: 'Acme Back Office')->index(new Request());
+
+    expect($view->lastData)->toHaveKey('pageTitle')
+        ->and($view->lastData['pageTitle'])->toBe('Acme Back Office');
 });

@@ -7,6 +7,4 @@ namespace Marko\AdminPanel\Config;
 interface AdminPanelConfigInterface
 {
     public function getPageTitle(): string;
-
-    public function getItemsPerPage(): int;
 }

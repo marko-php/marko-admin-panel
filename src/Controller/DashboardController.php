@@ -7,6 +7,7 @@ namespace Marko\AdminPanel\Controller;
 use Marko\AdminAuth\AdminGuardResolver;
 use Marko\AdminAuth\Entity\AdminUserInterface;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
+use Marko\AdminPanel\Config\AdminPanelConfigInterface;
 use Marko\AdminPanel\Menu\AdminMenuBuilderInterface;
 use Marko\Routing\Attributes\Get;
 use Marko\Routing\Attributes\Middleware;
@@ -20,6 +21,7 @@ class DashboardController
         private readonly ViewInterface $view,
         private readonly AdminMenuBuilderInterface $menuBuilder,
         private readonly AdminGuardResolver $adminGuard,
+        private readonly AdminPanelConfigInterface $config,
     ) {}
 
     /**
@@ -41,6 +43,7 @@ class DashboardController
         return $this->view->render('admin-panel::dashboard/index', [
             'sections' => $sections,
             'currentUser' => $user,
+            'pageTitle' => $this->config->getPageTitle(),
         ]);
     }
 }

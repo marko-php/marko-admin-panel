@@ -16,9 +16,4 @@ readonly class AdminPanelConfig implements AdminPanelConfigInterface
     {
         return $this->config->getString('admin-panel.page_title');
     }
-
-    public function getItemsPerPage(): int
-    {
-        return $this->config->getInt('admin-panel.items_per_page');
-    }
 }
