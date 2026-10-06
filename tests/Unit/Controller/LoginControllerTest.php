@@ -286,6 +286,7 @@ it('returns to login with error on invalid credentials', function (): void {
         ->and($view->lastTemplate)->toBe('admin-panel::auth/login')
         ->and($view->lastData)->toHaveKey('error')
         ->and($view->lastData['error'])->toBe('Invalid email or password.')
+        ->and($view->lastData['csrfToken'])->toBe('test-csrf-token')
         ->and($view->lastData)->toHaveKey('loginUrl')
         ->and($view->lastData['loginUrl'])->toBe('/admin/login');
 });
