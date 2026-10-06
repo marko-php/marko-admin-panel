@@ -76,6 +76,7 @@ readonly class LoginController
 
         return $this->view->render('admin-panel::auth/login', [
             'loginUrl' => $this->adminConfig->getRoutePrefix() . '/login',
+            'csrfToken' => $this->csrfTokenManager->get(),
             'error' => 'Invalid email or password.',
         ]);
     }
