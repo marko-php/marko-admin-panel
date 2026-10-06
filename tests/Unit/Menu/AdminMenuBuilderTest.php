@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Marko\AdminPanel\Tests\Unit\Menu;
 
+use LogicException;
 use Marko\Admin\Contracts\AdminSectionInterface;
 use Marko\Admin\Contracts\AdminSectionRegistryInterface;
 use Marko\Admin\Contracts\MenuItemInterface;
+use Marko\Admin\Discovery\AdminSectionDefinition;
 use Marko\Admin\MenuItem;
 use Marko\AdminAuth\Entity\AdminUserInterface;
 use Marko\AdminPanel\Menu\AdminMenuBuilder;
@@ -21,6 +23,12 @@ class StubMenuSectionRegistry implements AdminSectionRegistryInterface
         AdminSectionInterface $section,
     ): void {
         $this->sections[$section->getId()] = $section;
+    }
+
+    public function registerDefinition(
+        AdminSectionDefinition $definition,
+    ): void {
+        throw new LogicException('Register built sections with register() in this test');
     }
 
     public function all(): array

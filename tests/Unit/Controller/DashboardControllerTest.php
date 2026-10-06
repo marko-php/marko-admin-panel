@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Marko\AdminPanel\Tests\Unit\Controller;
 
+use LogicException;
 use Marko\Admin\Contracts\AdminSectionInterface;
 use Marko\Admin\Contracts\AdminSectionRegistryInterface;
+use Marko\Admin\Discovery\AdminSectionDefinition;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
 use Marko\AdminPanel\Controller\DashboardController;
 use Marko\Routing\Attributes\Middleware;
@@ -55,6 +57,12 @@ class StubSectionRegistry implements AdminSectionRegistryInterface
         AdminSectionInterface $section,
     ): void {
         $this->sections[$section->getId()] = $section;
+    }
+
+    public function registerDefinition(
+        AdminSectionDefinition $definition,
+    ): void {
+        throw new LogicException('Register built sections with register() in this test');
     }
 
     public function all(): array
