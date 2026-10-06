@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Marko\AdminPanel\Tests\Unit\Menu;
 
+use DateTimeImmutable;
 use LogicException;
 use Marko\Admin\Contracts\AdminSectionInterface;
 use Marko\Admin\Contracts\AdminSectionRegistryInterface;
@@ -134,6 +135,15 @@ class StubMenuAdminUser implements AdminUserInterface
 
     public function setRememberToken(
         ?string $token,
+    ): void {}
+
+    public function getRememberTokenExpiresAt(): ?DateTimeImmutable
+    {
+        return null;
+    }
+
+    public function setRememberTokenExpiresAt(
+        ?DateTimeImmutable $expiresAt,
     ): void {}
 
     public function getRememberTokenName(): string
