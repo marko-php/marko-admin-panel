@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Marko\AdminPanel\Controller;
 
 use Marko\Admin\Config\AdminConfigInterface;
-use Marko\Authentication\Contracts\GuardInterface;
+use Marko\AdminAuth\AdminGuardResolver;
 use Marko\Routing\Attributes\Get;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Attributes\Post;
@@ -15,11 +15,15 @@ use Marko\Security\Contracts\CsrfTokenManagerInterface;
 use Marko\Security\Middleware\CsrfMiddleware;
 use Marko\View\ViewInterface;
 
+/**
+ * Logs admins in and out on the admin guard (admin-auth.guard), never the
+ * app's default guard, so only AdminUserProvider users can sign in here.
+ */
 readonly class LoginController
 {
     public function __construct(
         private ViewInterface $view,
-        private GuardInterface $guard,
+        private AdminGuardResolver $adminGuard,
         private AdminConfigInterface $adminConfig,
         private CsrfTokenManagerInterface $csrfTokenManager,
     ) {}
@@ -28,7 +32,7 @@ readonly class LoginController
     public function showLoginForm(
         Request $request,
     ): Response {
-        if ($this->guard->check()) {
+        if ($this->adminGuard->guard()->check()) {
             return Response::redirect($this->adminConfig->getRoutePrefix());
         }
 
@@ -48,7 +52,7 @@ readonly class LoginController
             'password' => $request->post('password'),
         ];
 
-        if ($this->guard->attempt($credentials)) {
+        if ($this->adminGuard->guard()->attempt($credentials)) {
             return Response::redirect($this->adminConfig->getRoutePrefix());
         }
 
@@ -63,7 +67,7 @@ readonly class LoginController
     public function logout(
         Request $request,
     ): Response {
-        $this->guard->logout();
+        $this->adminGuard->guard()->logout();
 
         return Response::redirect($this->adminConfig->getRoutePrefix() . '/login');
     }

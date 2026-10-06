@@ -6,6 +6,7 @@ namespace Marko\AdminPanel\Tests\Unit\Controller\Login;
 
 use Marko\Admin\Config\AdminConfigInterface;
 use Marko\AdminPanel\Controller\LoginController;
+use Marko\AdminPanel\Tests\Fixtures\FixedAdminGuardResolver;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Http\Request;
 use Marko\Routing\Http\Response;
@@ -168,7 +169,7 @@ it('exposes a CSRF token value to the login view so the form can submit it', fun
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: $csrfTokenManager,
     );
@@ -199,7 +200,7 @@ it('redirects authenticated users from login page to dashboard', function (): vo
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );
@@ -220,7 +221,7 @@ it('authenticates user on POST /admin/login with valid credentials', function ()
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );
@@ -247,7 +248,7 @@ it('redirects to dashboard after successful login', function (): void {
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );
@@ -270,7 +271,7 @@ it('returns to login with error on invalid credentials', function (): void {
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );
@@ -300,7 +301,7 @@ it('logs out user on POST /admin/logout and redirects to login', function (): vo
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );
@@ -321,7 +322,7 @@ it('renders login form on GET /admin/login', function (): void {
 
     $controller = new LoginController(
         view: $view,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
         adminConfig: $adminConfig,
         csrfTokenManager: new LoginStubCsrfTokenManager(),
     );

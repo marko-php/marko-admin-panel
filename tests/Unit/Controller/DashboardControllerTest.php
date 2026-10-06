@@ -10,6 +10,7 @@ use Marko\Admin\Contracts\AdminSectionRegistryInterface;
 use Marko\Admin\Discovery\AdminSectionDefinition;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
 use Marko\AdminPanel\Controller\DashboardController;
+use Marko\AdminPanel\Tests\Fixtures\FixedAdminGuardResolver;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Http\Request;
 use Marko\Routing\Http\Response;
@@ -138,7 +139,7 @@ it('renders dashboard template with registered sections on GET /admin', function
     $controller = new DashboardController(
         view: $view,
         sectionRegistry: $registry,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
     );
 
     $request = new Request();
@@ -170,7 +171,7 @@ it('passes admin sections to dashboard template for display', function (): void 
     $controller = new DashboardController(
         view: $view,
         sectionRegistry: $registry,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
     );
 
     $request = new Request();
@@ -196,7 +197,7 @@ it('passes current user to base layout template', function (): void {
     $controller = new DashboardController(
         view: $view,
         sectionRegistry: $registry,
-        guard: $guard,
+        adminGuard: new FixedAdminGuardResolver($guard),
     );
 
     $request = new Request();
