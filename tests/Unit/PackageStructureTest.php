@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Marko\AdminPanel\Menu\AdminMenuBuilder;
+use Marko\AdminPanel\Menu\AdminMenuBuilderInterface;
+
 it('has valid composer.json with admin, admin-auth, view, auth, session, routing dependencies', function (): void {
     $composerPath = dirname(__DIR__, 2) . '/composer.json';
 
@@ -26,4 +29,11 @@ it('has valid composer.json with admin, admin-auth, view, auth, session, routing
         ->and($composer['autoload-dev']['psr-4'])->toHaveKey('Marko\\AdminPanel\\Tests\\')
         ->and($composer['autoload-dev']['psr-4']['Marko\\AdminPanel\\Tests\\'])->toBe('tests/')
         ->and($composer['extra']['marko']['module'])->toBeTrue();
+});
+
+it('binds AdminMenuBuilderInterface so DashboardController can be autowired', function (): void {
+    $module = require dirname(__DIR__, 2) . '/module.php';
+
+    expect($module['bindings'])->toHaveKey(AdminMenuBuilderInterface::class)
+        ->and($module['bindings'][AdminMenuBuilderInterface::class])->toBe(AdminMenuBuilder::class);
 });

@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Marko\AdminPanel\Controller;
 
-use Marko\Admin\Contracts\AdminSectionRegistryInterface;
 use Marko\AdminAuth\AdminGuardResolver;
+use Marko\AdminAuth\Entity\AdminUserInterface;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
+use Marko\AdminPanel\Menu\AdminMenuBuilderInterface;
 use Marko\Routing\Attributes\Get;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Http\Request;
@@ -17,20 +18,29 @@ class DashboardController
 {
     public function __construct(
         private readonly ViewInterface $view,
-        private readonly AdminSectionRegistryInterface $sectionRegistry,
+        private readonly AdminMenuBuilderInterface $menuBuilder,
         private readonly AdminGuardResolver $adminGuard,
     ) {}
 
+    /**
+     * Shows only the sections the current admin user can reach. A user that is
+     * not an admin user sees none; AdminAuthMiddleware already rejects them,
+     * so this only keeps the page closed if it is reached without it.
+     */
     #[Get(path: '/admin')]
     #[Middleware(AdminAuthMiddleware::class)]
     public function index(
         Request $request,
     ): Response {
-        $sections = $this->sectionRegistry->all();
+        $user = $this->adminGuard->guard()->user();
+
+        $sections = $user instanceof AdminUserInterface
+            ? $this->menuBuilder->buildDashboardSections($user)
+            : [];
 
         return $this->view->render('admin-panel::dashboard/index', [
             'sections' => $sections,
-            'currentUser' => $this->adminGuard->guard()->user(),
+            'currentUser' => $user,
         ]);
     }
 }
