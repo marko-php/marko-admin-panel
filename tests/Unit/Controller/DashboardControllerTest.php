@@ -7,9 +7,14 @@ namespace Marko\AdminPanel\Tests\Unit\Controller;
 use LogicException;
 use Marko\Admin\Contracts\AdminSectionInterface;
 use Marko\Admin\Contracts\AdminSectionRegistryInterface;
+use Marko\Admin\Contracts\MenuItemInterface;
 use Marko\Admin\Discovery\AdminSectionDefinition;
+use Marko\Admin\MenuItem;
+use Marko\AdminAuth\Entity\AdminUser;
+use Marko\AdminAuth\Entity\Role;
 use Marko\AdminAuth\Middleware\AdminAuthMiddleware;
 use Marko\AdminPanel\Controller\DashboardController;
+use Marko\AdminPanel\Menu\AdminMenuBuilder;
 use Marko\AdminPanel\Tests\Fixtures\FixedAdminGuardResolver;
 use Marko\Routing\Attributes\Middleware;
 use Marko\Routing\Http\Request;
@@ -81,11 +86,15 @@ class StubSectionRegistry implements AdminSectionRegistryInterface
 // Stub for AdminSectionInterface
 class StubAdminSection implements AdminSectionInterface
 {
+    /**
+     * @param array<MenuItemInterface> $menuItems
+     */
     public function __construct(
         private readonly string $id,
         private readonly string $label,
         private readonly string $icon = 'default',
         private readonly int $sortOrder = 0,
+        private readonly array $menuItems = [],
     ) {}
 
     public function getId(): string
@@ -110,8 +119,60 @@ class StubAdminSection implements AdminSectionInterface
 
     public function getMenuItems(): array
     {
-        return [];
+        return $this->menuItems;
     }
+}
+
+function createDashboardSection(
+    string $id,
+    string $label,
+    int $sortOrder = 0,
+): StubAdminSection {
+    return new StubAdminSection(
+        id: $id,
+        label: $label,
+        sortOrder: $sortOrder,
+        menuItems: [
+            new MenuItem(
+                id: "$id-index",
+                label: $label,
+                url: "/admin/$id",
+                permission: "$id.view",
+            ),
+        ],
+    );
+}
+
+function createDashboardAdminUser(
+    bool $superAdmin = false,
+    array $permissionKeys = [],
+): AdminUser {
+    $role = new Role();
+    $role->id = 1;
+    $role->name = $superAdmin ? 'Super Admin' : 'Editor';
+    $role->slug = $superAdmin ? 'super-admin' : 'editor';
+    $role->isSuperAdmin = $superAdmin ? '1' : '0';
+
+    $user = new AdminUser();
+    $user->id = 5;
+    $user->email = 'admin@example.com';
+    $user->password = 'hashed';
+    $user->name = 'Admin User';
+    $user->setRoles(roles: [$role], permissionKeys: $permissionKeys);
+
+    return $user;
+}
+
+function createDashboardController(
+    StubView $view,
+    StubSectionRegistry $registry,
+    FakeGuard $guard,
+): DashboardController {
+    return new DashboardController(
+        view: $view,
+        menuBuilder: new AdminMenuBuilder($registry),
+        adminGuard: new FixedAdminGuardResolver($guard),
+    );
 }
 
 it('requires authentication via AdminAuthMiddleware for dashboard', function (): void {
@@ -128,22 +189,11 @@ it('renders dashboard template with registered sections on GET /admin', function
     $registry = new StubSectionRegistry();
     $guard = new FakeGuard(name: 'admin', attemptResult: false);
 
-    $section1 = new StubAdminSection(id: 'catalog', label: 'Catalog');
-    $section2 = new StubAdminSection(id: 'content', label: 'Content');
-    $registry->register($section1);
-    $registry->register($section2);
+    $registry->register(createDashboardSection('catalog', 'Catalog'));
+    $registry->register(createDashboardSection('content', 'Content'));
+    $guard->setUser(createDashboardAdminUser(superAdmin: true));
 
-    $user = new FakeAuthenticatable(id: 1);
-    $guard->setUser($user);
-
-    $controller = new DashboardController(
-        view: $view,
-        sectionRegistry: $registry,
-        adminGuard: new FixedAdminGuardResolver($guard),
-    );
-
-    $request = new Request();
-    $response = $controller->index($request);
+    $response = createDashboardController($view, $registry, $guard)->index(new Request());
 
     expect($response->statusCode())->toBe(200)
         ->and($response->headers())->toHaveKey('Content-Type')
@@ -158,24 +208,12 @@ it('passes admin sections to dashboard template for display', function (): void 
     $registry = new StubSectionRegistry();
     $guard = new FakeGuard(name: 'admin', attemptResult: false);
 
-    $section1 = new StubAdminSection(id: 'catalog', label: 'Catalog', sortOrder: 10);
-    $section2 = new StubAdminSection(id: 'content', label: 'Content', sortOrder: 20);
-    $section3 = new StubAdminSection(id: 'settings', label: 'Settings', sortOrder: 30);
-    $registry->register($section1);
-    $registry->register($section2);
-    $registry->register($section3);
+    $registry->register(createDashboardSection('catalog', 'Catalog', 10));
+    $registry->register(createDashboardSection('content', 'Content', 20));
+    $registry->register(createDashboardSection('settings', 'Settings', 30));
+    $guard->setUser(createDashboardAdminUser(superAdmin: true));
 
-    $user = new FakeAuthenticatable(id: 1);
-    $guard->setUser($user);
-
-    $controller = new DashboardController(
-        view: $view,
-        sectionRegistry: $registry,
-        adminGuard: new FixedAdminGuardResolver($guard),
-    );
-
-    $request = new Request();
-    $controller->index($request);
+    createDashboardController($view, $registry, $guard)->index(new Request());
 
     $sections = $view->lastData['sections'];
 
@@ -186,22 +224,46 @@ it('passes admin sections to dashboard template for display', function (): void 
         ->and($sections[2]->getId())->toBe('settings');
 });
 
+it('shows a low-privilege admin only the sections they have permission for', function (): void {
+    $view = new StubView();
+    $registry = new StubSectionRegistry();
+    $guard = new FakeGuard(name: 'admin', attemptResult: false);
+
+    $registry->register(createDashboardSection('catalog', 'Catalog'));
+    $registry->register(createDashboardSection('content', 'Content'));
+    $registry->register(createDashboardSection('settings', 'Settings'));
+    $guard->setUser(createDashboardAdminUser(permissionKeys: ['content.view']));
+
+    createDashboardController($view, $registry, $guard)->index(new Request());
+
+    $sections = $view->lastData['sections'];
+
+    expect($sections)->toHaveCount(1)
+        ->and($sections[0]->getId())->toBe('content');
+});
+
+it('shows no sections to an authenticated user that is not an admin user', function (): void {
+    $view = new StubView();
+    $registry = new StubSectionRegistry();
+    $guard = new FakeGuard(name: 'admin', attemptResult: false);
+
+    $registry->register(createDashboardSection('catalog', 'Catalog'));
+    $guard->setUser(new FakeAuthenticatable(id: 9));
+
+    createDashboardController($view, $registry, $guard)->index(new Request());
+
+    expect($view->lastData['sections'])->toBe([]);
+});
+
 it('passes current user to base layout template', function (): void {
     $view = new StubView();
     $registry = new StubSectionRegistry();
     $guard = new FakeGuard(name: 'admin', attemptResult: false);
 
-    $user = new FakeAuthenticatable(id: 5);
+    $user = createDashboardAdminUser(superAdmin: true);
     $guard->setUser($user);
 
-    $controller = new DashboardController(
-        view: $view,
-        sectionRegistry: $registry,
-        adminGuard: new FixedAdminGuardResolver($guard),
-    );
-
-    $request = new Request();
-    $controller->index($request);
+    createDashboardController($view, $registry, $guard)->index(new Request());
 
     expect($view->lastData)->toHaveKey('currentUser')
         ->and($view->lastData['currentUser'])->toBe($user)
